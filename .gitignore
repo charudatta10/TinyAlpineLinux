@@ -1,0 +1,12 @@
+# Logs
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Extracted QEMU image (regenerable from qemu.7z)
+extracted_qemu/
+
+# Temp files
+*.tmp
