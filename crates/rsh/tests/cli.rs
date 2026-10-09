@@ -8,15 +8,23 @@ fn sh() -> Command {
 }
 
 fn run(src: &str) -> Output {
-    sh()
-        .creation_flags(0x00000200) // CREATE_NO_WINDOW on Windows so ConPTY
-        .args(["-c", src])
-        .output()
-        .expect("run rsh")
+    let mut cmd = sh();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x00000200); // CREATE_NO_WINDOW so ConPTY can
+    }
+    cmd.args(["-c", src]).output().expect("run rsh")
 }
 
 fn run_stdin(src: &str, input: &str) -> Output {
-    let mut child = sh()
+    let mut cmd = sh();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x00000200);
+    }
+    let mut child = cmd
         .args(["-c", src])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
