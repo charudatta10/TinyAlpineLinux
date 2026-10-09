@@ -12,3 +12,38 @@ jobs:
       - uses: actions/checkout@v4
       - name: Syntax check init script
         run: bash -n init
+
+  rust-unix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test busybox-rs and rsh
+        run: cargo test -p busybox-rs -p rsh
+      - name: Release build (size budget)
+        run: cargo build --release -p busybox-rs -p rsh
+
+  rust-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test all crates
+        run: cargo test -p busybox-rs -p rsh -p st-terminal-rs
+      - name: Release build
+        run: cargo build --release -p busybox-rs -p rsh -p st-terminal-rs
+      - name: Enforce 3 MB binary budget
+        shell: pwsh
+        run: |
+          $budget = 3MB
+          foreach ($exe in "busybox-rs", "rsh", "st-terminal-rs") {
+            $size = (Get-Item "target/release/$exe.exe").Length
+            Write-Host ("{0}.exe: {1:N0} bytes" -f $exe, $size)
+            if ($size -gt $budget) {
+              Write-Error "$exe.exe exceeds the 3 MB budget"
+              exit 1
+            }
+          }
+      - name: Terminal smoke test (ConPTY end to end)
+        shell: bash
+        run: ./target/release/st-terminal-rs.exe --smoke

@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/busybox-rs",
+    "crates/rsh",
+    "crates/st-terminal-rs",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/EN10/TinyAlpineLinux"
+
+# Shared release settings: every crate must stay under a 3 MB binary budget.
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+incremental = false
+rpath = false

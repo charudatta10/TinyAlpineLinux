@@ -107,6 +107,34 @@ qemu-system-x86_64 -kernel ./bzImage -initrd ./initramfs.cpio.gz
 - Starting point for custom embedded, appliance, or recovery images
 - Small foundation for container or chroot preparation workflows
 
+## Rust Components (`crates/`)
+
+Alongside the bootable image, this repository contains three small, fully
+self-contained Rust binaries, each budgeted to stay **under 3 MB**:
+
+| Crate | What it is | Release size (x86_64 Windows) |
+| --- | --- | --- |
+| [`crates/st-terminal-rs`](crates/st-terminal-rs) | Cross-platform GUI terminal emulator (ConPTY on Windows, POSIX PTY on Unix), a software-rendered port of [st-terminal](https://github.com/gh0stzk/st-terminal)'s spirit: winit window, VT100/xterm parser with 256-colour + truecolor, scrollback, alt screen, `font8x8` glyphs | ~0.54 MB |
+| [`crates/rsh`](crates/rsh) | Minimal dash/ash-style POSIX shell: pipelines, redirection, `if/for/while/case`, functions, `$(( ))` arithmetic, command substitution, globbing, heredocs, job control basics | ~0.56 MB |
+| [`crates/busybox-rs`](crates/busybox-rs) | BusyBox-style multicall utilities (`ls`, `cp`, `mv`, `rm`, `cat`, `grep`, `sed`, `awk`-lite, `printf`, `find`, `kill`, `date`, …) dispatched by argv[0] or first argument | ~0.52 MB |
+
+Build and test everything:
+
+```sh
+cargo test -p busybox-rs -p rsh -p st-terminal-rs
+cargo build --release -p busybox-rs -p rsh -p st-terminal-rs
+```
+
+The terminal emulator has a headless end-to-end check that drives `rsh` on a
+pseudo-terminal and asserts the parsed screen contents:
+
+```sh
+./target/release/st-terminal-rs.exe --smoke   # prints "smoke: OK"
+```
+
+CI enforces the 3 MB budget on every release binary and runs the smoke test
+on Windows.
+
 ## Notes
 
 - This is an experimental minimal system, not a full general-purpose Linux distribution.

@@ -10,3 +10,6 @@ extracted_qemu/
 
 # Temp files
 *.tmp
+
+# Rust build output
+/target/
