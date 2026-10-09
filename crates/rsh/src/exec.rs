@@ -1125,6 +1125,11 @@ pub fn spawn_child(sh: &mut Shell, p: Prepared, io: &mut Io) -> Result<Child, i3
         }
     };
     cmd.stdin(stdin).stdout(stdout).stderr(stderr);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x00000200 /* CREATE_NO_WINDOW */);
+    }
     restore_sigpipe(&mut cmd);
     match cmd.spawn() {
         Ok(c) => Ok(c),

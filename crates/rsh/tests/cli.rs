@@ -8,7 +8,11 @@ fn sh() -> Command {
 }
 
 fn run(src: &str) -> Output {
-    sh().args(["-c", src]).output().expect("run rsh")
+    sh()
+        .creation_flags(0x00000200) // CREATE_NO_WINDOW on Windows so ConPTY
+        .args(["-c", src])
+        .output()
+        .expect("run rsh")
 }
 
 fn run_stdin(src: &str, input: &str) -> Output {
