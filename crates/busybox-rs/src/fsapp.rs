@@ -224,12 +224,10 @@ fn mode_string(md: &Metadata) -> String {
         'd'
     } else if ft.is_symlink() {
         'l'
-    } else if ft.is_fifo() {
-        'p'
-    } else if ft.is_socket() {
-        's'
-    } else {
+    } else if ft.is_file() {
         '-'
+    } else {
+        '?'
     });
     let mode = md.mode();
     let bits = [
