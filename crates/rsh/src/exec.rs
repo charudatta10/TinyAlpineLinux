@@ -75,7 +75,7 @@ impl Sink {
             Sink::Stdout | Sink::Stderr => Stdio::inherit(),
             Sink::Null => Stdio::null(),
             Sink::File(f) => Stdio::from(f.try_clone()?),
-            Sink::Pipe(p) => Stdio::from(p.try_clone()?),
+            Sink::Pipe(p) => make_pipe_stdio(p.try_clone()?).into(),
         })
     }
 }
@@ -96,7 +96,7 @@ impl Source {
             Source::Inherit => Ok(Stdio::inherit()),
             Source::Null => Ok(Stdio::null()),
             Source::File(f) => Ok(Stdio::from(f.try_clone()?)),
-            Source::Pipe(p) => Ok(Stdio::from(p.try_clone()?)),
+            Source::Pipe(p) => Ok(Stdio::from(make_pipe_stdio(p.try_clone()?))),
             Source::Cursor(c) => {
                 // Feed in-memory data (here-documents) through a pipe written
                 // by a helper thread so large bodies cannot deadlock.
@@ -105,7 +105,7 @@ impl Source {
                 std::thread::spawn(move || {
                     let _ = w.write_all(&data);
                 });
-                Ok(Stdio::from(r))
+                Ok(Stdio::from(make_pipe_stdio(r)))
             }
         }
     }
@@ -123,8 +123,95 @@ impl Source {
             }
             Source::Null => Ok(None),
             Source::File(f) => read_line_from(f),
-            Source::Pipe(p) => read_line_from(p),
+            Source::Pipe(p) => {
+                let h = make_pipe_stdio(p);
+                read_line_from(&mut _windows_pipe_read::WindowPipeRead::new(h))
+            }
             Source::Cursor(c) => read_line_from(c),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn make_pipe_stdio(pipe: os_pipe::OwnedHandle) -> std::os::windows::io::OwnedHandle {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    use std::os::windows::io::OwnedHandle as WinOwnedHandle;
+    // Duplicate the pipe handle so we can clear HANDLE_FLAG_INHERIT.
+    let mut dup: *mut std::ffi::c_void = std::ptr::null_mut();
+    unsafe {
+        let ok = windows_sys::Win32::Foundation::DuplicateHandle(
+            windows_sys::Win32::Foundation::GetCurrentProcess(),
+            pipe.as_raw_handle() as *mut _,
+            windows_sys::Win32::Foundation::GetCurrentProcess(),
+            &mut dup,
+            0,
+            windows_sys::Win32::Foundation::FALSE,
+            windows_sys::Win32::System::Threading::DUPLICATE_SAME_ACCESS,
+        );
+        debug_assert!(ok != 0, "DuplicateHandle failed");
+    }
+    let h = unsafe { WinOwnedHandle::from_raw_handle(dup) };
+    let mut flags = 0u32;
+    let mut flags_len = 4;
+    unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetHandleInformation(
+            h.as_raw_handle() as *mut _,
+            &mut flags,
+            &mut flags_len,
+        );
+    }
+    if flags & windows_sys::Win32::Storage::FileSystem::HANDLE_FLAG_INHERIT != 0 {
+        unsafe {
+            windows_sys::Win32::Storage::FileSystem::SetHandleInformation(
+                h.as_raw_handle() as *mut _,
+                windows_sys::Win32::Storage::FileSystem::HANDLE_FLAG_INHERIT,
+                0,
+            );
+        }
+    }
+    h
+}
+
+#[cfg(not(windows))]
+fn make_pipe_stdio(pipe: os_pipe::OwnedHandle) -> os_pipe::OwnedHandle {
+    pipe
+}
+
+mod _windows_pipe_read {
+    use super::*;
+    use std::io::Read;
+
+    pub struct WindowPipeRead {
+        inner: std::os::windows::io::OwnedHandle,
+    }
+
+    impl WindowPipeRead {
+        pub fn new(pipe: std::os::windows::io::OwnedHandle) -> Self {
+            Self { inner: pipe }
+        }
+    }
+
+    impl Read for WindowPipeRead {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            use std::os::windows::io::AsRawHandle;
+            unsafe {
+                let mut read = 0usize;
+                let ok = windows_sys::Win32::System::IO::ReadFile(
+                    self.inner.as_raw_handle() as *mut _,
+                    buf.as_mut_ptr() as *mut _,
+                    buf.len() as u32,
+                    &mut read,
+                    None,
+                );
+                if ok.is_err() {
+                    let err = std::io::Error::last_os_error();
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        return Ok(0);
+                    }
+                    return Err(err);
+                }
+                Ok(read as usize)
+            }
         }
     }
 }
